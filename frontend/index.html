@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OakLand</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <nav>
+            <ul>
+                <li> Funcionalidades 
+                    <ul>
+                        <li id="crearArchivo" > Crear archivo </li>
+                        <li id="abrirArchivo" > Abrir archivos </li>
+                        <li id="guardarArchivo" > Guardar archivo </li>
+                        <li id="guardarSalida" > Guardar traduccion RISCV </li>
+                    </ul>
+                </li>
+                <li> Herramientas
+                    <ul>
+                        <li class="btn" id="btn">Ejecutar</li>
+                        <li id="addTab" > Crea Pestaña </li>
+                        <li id="removeTab" > Eliminar Pestaña </li>
+                    </ul>
+                </li>
+                <li> Reportes
+                    <ul>
+                        <li class="ReporteError"> Reporte de errores </li>
+                        <li class="ReporteSimbolo"> Reporte de simbolos </li>
+                    </ul>
+                </li>
+            </ul>
+        </nav>
+
+
+        <div class="textareas">
+            <div class="t1"> 
+                <h1 > OakLand </h1>
+            </div>
+            <div class="tabs-container">
+                <div id="tabs"></div> <!-- Contenedor de pestañas -->
+                <div id="editors"></div>
+            </div>
+            <textarea class="readonly" id="salida" placeholder="" readonly></textarea>
+            <script type="module" src="../backend/parser.js"></script>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,107 @@
+
+/*
+entrada: 'abc'
+salida: [6513249]
+
+'a' -> 97 -> 01100001
+'b' -> 98 -> 01100010
+= 01100001 01100010
+
+*/
+
+export const stringTo32BitsArray = (str) => {
+    const resultado = []
+    let elementIndex = 0
+    let intRepresentation = 0;
+    let shift = 0;
+
+    while (elementIndex < str.length) {
+        intRepresentation = intRepresentation | (str.charCodeAt(elementIndex) << shift)
+        shift += 8
+        if (shift >= 32) {
+            resultado.push(intRepresentation)
+            intRepresentation = 0
+            shift = 0
+        }
+        elementIndex++
+    }
+
+    if (shift > 0) {
+        resultado.push(intRepresentation);
+    } else {
+        resultado.push(0);
+    }
+
+    return resultado;
+}
+
+
+export const stringTo1ByteArray = (str) => {
+    const resultado = [];
+    let elementIndex = 0;
+
+    while (elementIndex < str.length) {
+        const char = str[elementIndex];
+
+        if (char === '\\') {
+            // Verificamos que haya un siguiente carácter
+            if (elementIndex + 1 < str.length && str[elementIndex + 1] === ',') {
+                // Aumentamos el índice para ver el siguiente carácter después de la coma
+                if (elementIndex + 2 < str.length) {
+                    const siguienteChar = str[elementIndex + 2];
+
+                    switch (siguienteChar) {
+                        case 'n':
+                            resultado.push(10); // \n
+                            elementIndex += 3; // Saltamos la secuencia completa
+                            continue;
+                        case 't':
+                            resultado.push(9);  // \t
+                            elementIndex += 3; // Saltamos la secuencia completa
+                            continue;
+                        case 'r':
+                            resultado.push(13); // \r
+                            elementIndex += 3; // Saltamos la secuencia completa
+                            continue;
+                        case '0':
+                            resultado.push(0);  // \0
+                            elementIndex += 3; // Saltamos la secuencia completa
+                            continue;
+                        case '\\':
+                            resultado.push(92); // \\
+                            elementIndex += 3; // Saltamos la secuencia completa
+                            continue;
+                        case '"':
+                            resultado.push(34); // \"
+                            elementIndex += 3; // Saltamos la secuencia completa
+                            continue;
+                        case "'":
+                            resultado.push(39); // \'
+                            elementIndex += 3; // Saltamos la secuencia completa
+                            continue;
+                    }
+                }
+            }
+        }
+        
+        // Si no es una secuencia de escape, añadimos el carácter actual
+        resultado.push(str.charCodeAt(elementIndex));
+        elementIndex++;
+    }
+    
+    // Añadimos un terminador nulo al final
+    resultado.push(0);
+    return resultado;
+};
+
+
+export const numberToF32 = (number) => {
+    const buffer = new ArrayBuffer(4);
+    const float32arr = new Float32Array(buffer);
+    const uint32arr = new Uint32Array(buffer);
+    float32arr[0] = number;
+
+    const integer = uint32arr[0];
+    const hexRepr = integer.toString(16);
+    return '0x' + hexRepr;
+}
