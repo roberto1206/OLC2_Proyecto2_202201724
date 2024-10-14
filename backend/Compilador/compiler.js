@@ -7,6 +7,10 @@ export class CompilerVisitor extends BaseVisitor {
     constructor() {
         super();
         this.code = new Generador();
+
+        
+        this.continueLabel = null;
+        this.breakLabel = null;
     }
 
     /**
@@ -460,6 +464,89 @@ export class CompilerVisitor extends BaseVisitor {
 
         this.continueLabel = prevContinueLabel;
         this.breakLabel = prevBreakLabel;
+    }
+
+    /**
+     * @type {BaseVisitor['visitFor']}
+     */
+    visitFor(node) {
+        // node.cond
+        // node.inc
+        // node.stmt
+
+
+        /*
+            {
+                init()
+                startFor:
+                    cond
+                if !cond goto endFor
+                    stmt
+                incrementLabel:
+                    inc
+                    goto startFor
+                endFor:
+            } 
+        */
+
+        this.code.comment('For');
+
+        const startForLabel = this.code.getLabel();
+
+        const endForLabel = this.code.getLabel();
+        const prevBreakLabel = this.breakLabel;
+        this.breakLabel = endForLabel;
+
+        const incrementLabel = this.code.getLabel();
+        const prevContinueLabel = this.continueLabel;
+        this.continueLabel = incrementLabel;
+
+        this.code.newScope();
+
+        node.init.accept(this);
+
+        this.code.addLabel(startForLabel);
+        this.code.comment('Condicion');
+        node.cond.accept(this);
+        this.code.popObject(r.T0);
+        this.code.comment('Fin de condicion');
+        this.code.beq(r.T0, r.ZERO, endForLabel);
+
+        this.code.comment('Cuerpo del for');
+        node.stmt.accept(this);
+
+        this.code.addLabel(incrementLabel);
+        node.inc.accept(this);
+        this.code.popObject(r.T0);
+        this.code.j(startForLabel);
+
+        this.code.addLabel(endForLabel);
+
+        this.code.comment('Reduciendo la pila');
+        const bytesToRemove = this.code.endScope();
+
+        if (bytesToRemove > 0) {
+            this.code.addi(r.SP, r.SP, bytesToRemove);
+        }
+
+        this.continueLabel = prevContinueLabel;
+        this.breakLabel = prevBreakLabel;
+
+        this.code.comment('Fin de For');
+    }
+
+    /**
+     * @type {BaseVisitor['node']}
+     */
+    visitBreak(node) {
+        this.code.j(this.breakLabel);
+    }
+
+    /**
+     * @type {BaseVisitor['node']}
+     */
+    visitContinue(node) {
+        this.code.j(this.continueLabel);
     }
 
 
