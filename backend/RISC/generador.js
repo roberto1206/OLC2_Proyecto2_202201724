@@ -41,6 +41,10 @@ export class Generador {
         return label
     }
 
+    label(label) {
+        this.instrucciones.push(new Instruction(`${label}:`))
+    }
+
     add(rd, rs1, rs2) {
         this.instrucciones.push(new Instruction('add', rd, rs1, rs2))
     }
@@ -77,9 +81,15 @@ export class Generador {
         this.instrucciones.push(new Instruction('lb', rd, `${inmediato}(${rs1})`))
     }
 
+    /**
+     * Carga datos en memoria
+     * sirve para arreglos. cadenas y otras cosas en memoria
+     */
+    la(rd, label) {
+        this.instrucciones.push(new Instruction('la', rd, label));
+    } 
+
     // --- Saltos condicionales
-
-
     /**
      * ==
      */
@@ -93,7 +103,7 @@ export class Generador {
     bne(rs1, rs2, label) {
         this.instrucciones.push(new Instruction('bne', rs1, rs2, label))
     }
-
+   
     /**
      * <
      */
@@ -108,11 +118,16 @@ export class Generador {
         this.instrucciones.push(new Instruction('bge', rs1, rs2, label))
     }
 
+    snez(rd, rs1) {
+        this.instrucciones.push(new Instruction('snez', rd, rs1))
+    }
+
     li(rd, inmediato) {
         this.instrucciones.push(new Instruction('li', rd, inmediato))
     }
 
     push(rd = r.T0) {
+        this.comment(`Pushing ${rd}`)
         this.addi(r.SP, r.SP, -4) // 4 bytes = 32 bits
         this.sw(rd, r.SP)
     }
@@ -157,6 +172,8 @@ export class Generador {
 
     printInt(rd = r.A0) {
 
+        console.log('printInt')
+
         if (rd !== r.A0) {
             this.push(r.A0)
             this.add(r.A0, rd, r.ZERO)
@@ -186,6 +203,31 @@ export class Generador {
         }
     }
 
+    printChar(rd = r.A0) {
+
+        if (rd !== r.A0) {
+            this.push(r.A0)
+            this.add(r.A0, rd, r.ZERO)
+        }
+    
+        this.li(r.A7, 11)  // System call for printing a character
+        this.ecall()
+    
+        if (rd !== r.A0) {
+            this.pop(r.A0)
+        }
+    }
+    
+    printFloat() {
+        this.li(r.A7, 2)
+        this.ecall()
+    }
+    
+    printBoolean(rd = r.A0) {
+        console.log('printBoolean');
+        this.callBuiltin('printBoolean');
+    }   
+    
     endProgram() {
         this.li(r.A7, 10)
         this.ecall()
@@ -226,6 +268,13 @@ export class Generador {
                 length = 4;
                 break;
 
+            case 'char':
+                this.comment(`Pushing char ${object.valor}`);
+                this.li(r.T0, object.valor.charCodeAt(0));  // Cargar el valor ASCII del carácter
+                this.push();                               // Empujar a la pila
+                length = 1;                                // Longitud de 1 byte para un carácter
+                break;
+
             case 'boolean':
                 this.li(r.T0, object.valor ? 1 : 0);
                 this.push(r.T0);
@@ -251,6 +300,7 @@ export class Generador {
     }
 
     popFloat(rd = r.FT0) {
+        this.comment(`Popping float to ${rd}`)
         this.flw(rd, r.SP)
         this.addi(r.SP, r.SP, 4)
     }
@@ -265,6 +315,10 @@ export class Generador {
                 break;
 
             case 'string':
+                this.pop(rd);
+                break;
+
+            case 'char':
                 this.pop(rd);
                 break;
             case 'boolean':
@@ -336,6 +390,8 @@ export class Generador {
             this.ret()
         })
         return `.data
+        false_str: .string "false\\n" 
+        true_str:  .string "true\\n"
         heap:
 .text
 
@@ -385,9 +441,30 @@ ${this.instrucciones.map(instruccion => `${instruccion}`).join('\n')}
         this.instrucciones.push(new Instruction('fcvt.s.w', rd, rs1))
     }
 
-    printFloat() {
-        this.li(r.A7, 2)
-        this.ecall()
+    //Relacionales flotantes 
+    // <=
+    fle(rd,rs1,rs2,label){
+        this.instrucciones.push(new Instruction('fle.s', rd, rs1, rs2, label))
+    }
+
+    // < 
+    flt(rd, rs1, rs2) {
+        this.instrucciones.push(new Instruction('flt.s', rd, rs1, rs2));
+    }
+
+    // ==
+    feq(rd, rs1, rs2, label){
+        this.instrucciones.push(new Instruction('feq.s', rd, rs1, rs2 , label))
+    }
+
+    //-f.FT0
+    fneg(rd, rs1){
+        this.instrucciones.push(new Instruction('fneg.s', rd, rs1))
+    }
+
+    //mover flotantes
+    fmvx(rd, rs1){
+        this.instrucciones.push(new Instruction('fmv.x.w', rd, rs1))
     }
 
 }

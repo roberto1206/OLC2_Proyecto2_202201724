@@ -107,11 +107,32 @@ export class CompilerVisitor extends BaseVisitor {
                     this.code.fmul(f.FT0, f.FT1, f.FT0);
                     break;
                 case '/':
-                    if (node.der.valor === 0) {
-                        throw new Error('ERROR NO SE PUEDE DIVIDIR ENTRE 0'); // Lanza un error si es 0
-                    }  
                     this.code.fdiv(f.FT0, f.FT1, f.FT0);
                     break;
+                case '<=':
+                    this.code.callBuiltin('lessOrEqualF');
+                    this.code.pushObject({ type: 'boolean', length: 4 });
+                    return
+                case '<':
+                    this.code.callBuiltin('lessF');
+                    this.code.pushObject({ type: 'boolean', length: 4 });
+                    return
+                case '>=':
+                    this.code.callBuiltin('moreOrEqualF');
+                    this.code.pushObject({ type: 'boolean', length: 4 });
+                    return
+                case '>':
+                    this.code.callBuiltin('moreF');
+                    this.code.pushObject({ type: 'boolean', length: 4 });
+                    return
+                case '==':
+                    this.code.callBuiltin('equalF');
+                    this.code.pushObject({ type: 'boolean', length: 4 });
+                    return
+                case '!=':
+                    this.code.callBuiltin('notEqualF');
+                    this.code.pushObject({ type: 'boolean', length: 4 });
+                    return
             }
 
             this.code.pushFloat(f.FT0);
@@ -142,26 +163,58 @@ export class CompilerVisitor extends BaseVisitor {
                 this.code.mul(r.T0, r.T0, r.T1);
                 this.code.push(r.T0);
                 break;
-                case '/':
-                case '%':
-                    // Verificar si el divisor (derecha) es 0
-                    if (node.der.valor === 0) {
-                        throw new Error('ERROR NO SE PUEDE DIVIDIR ENTRE 0'); // Lanza un error si es 0
-                    }
-                    // Continuar con la operación si no es 0
-                    if (node.op === '/') {
-                        this.code.div(r.T0, r.T1, r.T0); // División
-                    } else {
-                        this.code.rem(r.T0, r.T1, r.T0); // Módulo
-                    }
-                    this.code.push(r.T0);
-                    break;
+            case '/':
+                this.code.div(r.T0, r.T1, r.T0);
+                this.code.push(r.T0);
+                break;
+            case '%':
+                this.code.rem(r.T0, r.T1, r.T0);
+                this.code.push(r.T0);
+                break;
             case '<=':
                 this.code.callBuiltin('lessOrEqual');
                 this.code.pushObject({ type: 'boolean', length: 4 });
                 return
+            case '<':
+                this.code.callBuiltin('less');
+                this.code.pushObject({ type: 'boolean', length: 4 });
+                return
+            case '>=':
+                this.code.callBuiltin('moreOrEqual');
+                this.code.pushObject({ type: 'boolean', length: 4 });
+                return
+            case '>':
+                this.code.callBuiltin('more');
+                this.code.pushObject({ type: 'boolean', length: 4 });
+                return
+            case '==':
+                if (izq.type === 'string' && der.type === 'string') {
+                    this.code.add(r.A0, r.ZERO, r.T1);
+                    this.code.add(r.A1, r.ZERO, r.T0);
+                    this.code.callBuiltin('equalStr');
+                    this.code.pushObject({ type: 'boolean', length: 4 });
+                    return;
+                }
+                this.code.callBuiltin('equal');
+                this.code.pushObject({ type: 'boolean', length: 4 });
+                return
+            case '!=':
+                console.log("entra a != ");
+                if (izq.type === 'string' && der.type === 'string') {
+                    console.log("entra a != string");
+                    this.code.add(r.A0, r.ZERO, r.T1);
+                    this.code.add(r.A1, r.ZERO, r.T0);
+                    this.code.callBuiltin('notEqualStr');
+                    this.code.pushObject({ type: 'boolean', length: 4 });
+                    return;
+                }
+                console.log("entra a != no string");
+                this.code.callBuiltin('notEqual');
+                this.code.pushObject({ type: 'boolean', length: 4 });
+                return
         }
         this.code.pushObject({ type: 'int', length: 4 });
+        
     }    
 
     /**
@@ -170,17 +223,57 @@ export class CompilerVisitor extends BaseVisitor {
     visitOperacionUnaria(node) {
         node.exp.accept(this);
 
-        this.code.popObject(r.T0);
+        const isFloat = this.code.getTopObject().type === 'float';
+        
+        if (isFloat) {
+            this.code.popObject(f.FT0); // Sacar el operando flotante
 
-        switch (node.op) {
-            case '-':
-                this.code.li(r.T1, 0);
-                this.code.sub(r.T0, r.T1, r.T0);
-                this.code.push(r.T0);
-                this.code.pushObject({ type: 'int', length: 4 });
-                break;
+            switch (node.op) {
+                case '-':
+                    this.code.fneg(f.FT0, f.FT0); // Negar el flotante
+                    this.code.pushFloat(f.FT0); // Empujar el resultado flotante
+                    this.code.pushObject({ type: 'float', length: 4 }); // Indicar tipo flotante
+                    break;
+            }
+        } else {
+            this.code.popObject(r.T0); // Sacar el operando entero
+
+            switch (node.op) {
+                case '-':
+                    this.code.li(r.T1, 0);
+                    this.code.sub(r.T0, r.T1, r.T0); // Negar el entero
+                    this.code.push(r.T0); // Empujar el resultado entero
+                    this.code.pushObject({ type: 'int', length: 4 }); // Indicar tipo entero
+                    break;
+            }
         }
+
+        if (node.op === '!') {
+            node.exp.accept(this); // Aceptar la expresión
+            this.code.popObject(r.T0); // Sacar el valor booleano
+        
+            const labelFalse = this.code.getLabel();
+            const labelEnd = this.code.getLabel();
+        
+            this.code.beq(r.T0, r.ZERO, labelFalse); // Si el valor es verdadero, ir a labelFalse (es 1)
+            
+            // Si el valor es verdadero (1)
+            this.code.li(r.T0, 0); // Asignar 0 (falso)
+            this.code.push(r.T0); // Empujar el resultado en la pila
+            this.code.j(labelEnd); // Ir al final
+        
+            this.code.addLabel(labelFalse); 
+            // Si el valor es falso (0)
+            this.code.li(r.T0, 1); // Asignar 1 (verdadero)
+            this.code.push(r.T0); // Empujar el resultado en la pila
+        
+            this.code.addLabel(labelEnd);
+            this.code.pushObject({ type: 'boolean', length: 4 }); // Indicar tipo booleano
+            return;
+        }
+        
     }
+
 
     /**
      * @type {BaseVisitor['visitAgrupacion']}
@@ -215,7 +308,6 @@ export class CompilerVisitor extends BaseVisitor {
      */
     visitDeclaracionVariable(node) {
         this.code.comment(`Declaracion Variable: ${node.id}`);
-
 
         node.exp.accept(this);
         this.code.tagObject(node.id);
@@ -353,5 +445,7 @@ export class CompilerVisitor extends BaseVisitor {
         }
 
         //throw new Error('Comnetario no valido');
-    }       
+    }
+    
+
 }
