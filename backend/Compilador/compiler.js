@@ -271,7 +271,6 @@ export class CompilerVisitor extends BaseVisitor {
             this.code.pushObject({ type: 'boolean', length: 4 }); // Indicar tipo booleano
             return;
         }
-        
     }
 
 
@@ -426,6 +425,43 @@ export class CompilerVisitor extends BaseVisitor {
 
         this.code.comment('Fin del If');
     }
+
+    /**
+     * @type {BaseVisitor['visitWhile']}
+     */
+    visitWhile(node) {
+        /*
+        startWhile:
+            cond
+        if !cond goto endWhile
+            stmt
+            goto startWhile
+        endWhile:
+        */
+
+        const startWhileLabel = this.code.getLabel();
+        const prevContinueLabel = this.continueLabel;
+        this.continueLabel = startWhileLabel;
+
+        const endWhileLabel = this.code.getLabel();
+        const prevBreakLabel = this.breakLabel;
+        this.breakLabel = endWhileLabel;
+
+        this.code.addLabel(startWhileLabel);
+        this.code.comment('Condicion');
+        node.cond.accept(this);
+        this.code.popObject(r.T0);
+        this.code.comment('Fin de condicion');
+        this.code.beq(r.T0, r.ZERO, endWhileLabel);
+        this.code.comment('Cuerpo del while');
+        node.stmt.accept(this);
+        this.code.j(startWhileLabel);
+        this.code.addLabel(endWhileLabel);
+
+        this.continueLabel = prevContinueLabel;
+        this.breakLabel = prevBreakLabel;
+    }
+
 
     /**
      * @param {Comentarios} node
