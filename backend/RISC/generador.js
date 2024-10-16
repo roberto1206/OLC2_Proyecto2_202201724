@@ -170,6 +170,12 @@ export class Generador {
         this.jal(builtinName)
     }
 
+    printNewLine() {
+        this.li(r.A0, 10);   // ASCII de '\n'
+        this.li(r.A7, 11);   // System call for printing a character
+        this.ecall();        // Hacer la llamada al sistema para imprimir '\n'
+    }
+    
     printInt(rd = r.A0) {
 
         console.log('printInt')
@@ -181,6 +187,9 @@ export class Generador {
 
         this.li(r.A7, 1)
         this.ecall()
+
+        // Imprimir salto de línea ('\n')
+        this.printNewLine();
 
         if (rd !== r.A0) {
             this.pop(r.A0)
@@ -198,6 +207,9 @@ export class Generador {
         this.li(r.A7, 4)
         this.ecall()
 
+        // Imprimir salto de línea ('\n')
+        this.printNewLine();
+
         if (rd !== r.A0) {
             this.pop(r.A0)
         }
@@ -212,6 +224,9 @@ export class Generador {
     
         this.li(r.A7, 11)  // System call for printing a character
         this.ecall()
+
+        // Imprimir salto de línea ('\n')
+        this.printNewLine();
     
         if (rd !== r.A0) {
             this.pop(r.A0)
@@ -219,8 +234,12 @@ export class Generador {
     }
     
     printFloat() {
+        console.log('printFloat')
         this.li(r.A7, 2)
         this.ecall()
+
+        // Imprimir salto de línea ('\n')
+        this.printNewLine();
     }
     
     printBoolean(rd = r.A0) {
@@ -296,7 +315,10 @@ export class Generador {
     }
 
     pushObject(object) {
-        this.objectStack.push(object);
+        this.objectStack.push({
+            ...object,
+            depth: this.depth,
+        });
     }
 
     popFloat(rd = r.FT0) {
@@ -313,11 +335,9 @@ export class Generador {
             case 'int':
                 this.pop(rd);
                 break;
-
             case 'string':
                 this.pop(rd);
                 break;
-
             case 'char':
                 this.pop(rd);
                 break;
@@ -371,6 +391,7 @@ export class Generador {
         let byteOffset = 0;
         for (let i = this.objectStack.length - 1; i >= 0; i--) {
             if (this.objectStack[i].id === id) {
+                this.comment('variable ${id} found');
                 return [byteOffset, this.objectStack[i]];
             }
             byteOffset += this.objectStack[i].length;
@@ -466,5 +487,4 @@ ${this.instrucciones.map(instruccion => `${instruccion}`).join('\n')}
     fmvx(rd, rs1){
         this.instrucciones.push(new Instruction('fmv.x.w', rd, rs1))
     }
-
 }

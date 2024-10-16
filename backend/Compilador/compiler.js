@@ -17,8 +17,14 @@ export class CompilerVisitor extends BaseVisitor {
      * @type {BaseVisitor['visitExpresionStmt']}
     */
     visitExpresionStmt(node) {
+        this.code.comment('Expresion Statement');
         node.exp.accept(this);
-        this.code.popObject(r.T0);
+        //this.code.popObject(r.T0);
+        // Determinamos si el valor en la cima de la pila es un float
+        const isFloat = this.code.getTopObject().type === 'float';
+        // Pop del objeto en la cima de la pila
+        this.code.popObject(isFloat ? f.FA0 : r.A0);
+        this.code.comment('Fin Expresion Statement');
     }
 
     /**
@@ -87,9 +93,6 @@ export class CompilerVisitor extends BaseVisitor {
 
         node.izq.accept(this); // izq
         node.der.accept(this); // der
-
-        console.log(node.izq);
-        console.log(node.izq.valor);
 
         const isDerFloat = this.code.getTopObject().type === 'float';
         const der = this.code.popObject(isDerFloat ? f.FT0 : r.T0); // der
@@ -218,6 +221,7 @@ export class CompilerVisitor extends BaseVisitor {
                 return
         }
         this.code.pushObject({ type: 'int', length: 4 });
+        this.code.comment(`Fin Operacion: ${node.op}`);
         
     }    
 
@@ -225,11 +229,13 @@ export class CompilerVisitor extends BaseVisitor {
      * @type {BaseVisitor['visitOperacionUnaria']}
      */
     visitOperacionUnaria(node) {
+        this.code.comment(`Operacion Unaria: ${node.op}`);
         node.exp.accept(this);
 
         const isFloat = this.code.getTopObject().type === 'float';
         
         if (isFloat) {
+            this.code.comment('Operacion Unaria Float');
             this.code.popObject(f.FT0); // Sacar el operando flotante
 
             switch (node.op) {
@@ -275,13 +281,89 @@ export class CompilerVisitor extends BaseVisitor {
             this.code.pushObject({ type: 'boolean', length: 4 }); // Indicar tipo booleano
             return;
         }
+        this.code.comment(`Fin Operacion Unaria: ${node.op}`);
     }
 
+    /**
+     * @type {BaseVisitor['visitIncrementador']}
+     */
+    visitIncrementador(node) {
+        this.code.comment(`Incrementador Variable: ${node.id}`);
+    
+        // Evaluamos la expresión para obtener el valor con el que se va a incrementar/decrementar.
+        node.exp.accept(this);
+        const isFloat = this.code.getTopObject().type === 'float';
+        const valueObject = this.code.popObject(isFloat ? f.FA0 : r.A0);
+        
+        // Obtenemos el valor actual de la variable
+        const [offset, variableObject] = this.code.getObject(node.id);
+        this.code.addi(r.T0, r.SP, offset);
+    
+        // Manejo para variables flotantes
+        if (variableObject.type === 'float') {
+            // Cargamos el valor flotante actual de la variable en el registro flotante
+            this.code.flw(f.FT0, r.T0); // FT0 tiene el valor actual de la variable 'x'
+    
+            // Movemos el valor de la expresión evaluada al registro flotante adecuado
+            this.code.fmv(f.FT1, f.FA0); // Mueve FA0 (valor evaluado) a FT1
+    
+            // Dependiendo del operador, sumamos o restamos el valor flotante
+            switch (node.op) {
+                case '+=':
+                    this.code.fadd(f.FT0, f.FT0, f.FT1); // FT0 = FT0 + FT1
+                    break;
+                case '-=':
+                    this.code.fsub(f.FT0, f.FT0, f.FT1); // FT0 = FT0 - FT1
+                    break;
+            }
+    
+            // Guardamos el nuevo valor flotante en la variable
+            this.code.addi(r.T1, r.SP, offset); 
+            this.code.fsw(f.FT0, r.T1); // Guardamos el resultado en la posición de memoria de la variable
+    
+            // Actualizamos el tipo en el objeto de la variable
+            variableObject.type = valueObject.type;
+    
+            // Pusheamos el resultado flotante a la pila
+            this.code.pushFloat(f.FT0);
+            this.code.pushObject({ type: 'float', length: 4 });
+            return;
+        } 
+        else {
+            // Si la variable es un entero, seguimos el flujo regular de enteros
+            this.code.lw(r.T0, r.T0); // T0 tiene el valor actual de la variable 'x'
+    
+            // Dependiendo del operador, sumamos o restamos el valor
+            switch (node.op) {
+                case '+=':
+                    this.code.add(r.T0, r.T0, r.A0); // T0 = T0 + A0
+                    break;
+                case '-=':
+                    this.code.sub(r.T0, r.T0, r.A0); // T0 = T0 - A0
+                    break;
+            }
+    
+            // Guardamos el nuevo valor en la variable
+            this.code.addi(r.T1, r.SP, offset); 
+            this.code.sw(r.T0, r.T1); // Guardamos el resultado en la posición de memoria de la variable
+    
+            // Actualizamos el tipo en el objeto de la variable
+            variableObject.type = valueObject.type;
+    
+            // Pusheamos el resultado a la pila
+            this.code.push(r.T0);
+            this.code.pushObject({ type: 'int', length: 4 });
+        }
+    
+        this.code.comment(`Fin Incrementador Variable: ${node.id}`);
+    }
+    
 
     /**
      * @type {BaseVisitor['visitAgrupacion']}
      */
     visitAgrupacion(node) {
+        this.code.comment('Agrupacion');
         return node.exp.accept(this);
     }
 
@@ -304,6 +386,7 @@ export class CompilerVisitor extends BaseVisitor {
     
             tipoPrint[object.type]();
         }
+        this.code.comment('Fin Print');
     }
 
     /**
@@ -323,21 +406,49 @@ export class CompilerVisitor extends BaseVisitor {
      */
     visitAsignacion(node) {
         this.code.comment(`Asignacion Variable: ${node.id}`);
-
+    
+        // Evaluamos la expresión de asignación
         node.asgn.accept(this);
-        const valueObject = this.code.popObject(r.T0);
+    
+        // Determinamos si el valor en la cima de la pila es un float o no
+        const isFloat = this.code.getTopObject().type === 'float';
+        
+        // Pop del valor, dependiendo de si es float o no
+        const valueObject = this.code.popObject(isFloat ? f.FA0 : r.A0);
+    
+        // Obtenemos el desplazamiento (offset) de la variable en la memoria
         const [offset, variableObject] = this.code.getObject(node.id);
-
-        this.code.addi(r.T1, r.SP, offset);
-        this.code.sw(r.T0, r.T1);
-
+    
+        // Almacenamos el valor dependiendo de si es float o int
+        if (isFloat) {
+            // Si es flotante, usamos registros y operaciones flotantes
+            this.code.comment('Asignacion de tipo float');
+            this.code.addi(r.T1, r.SP, offset);   // Calculamos la posición en la pila
+            this.code.fsw(f.FA0, r.T1);           // Almacenamos el valor flotante en memoria
+        } else {
+            // Si es un entero u otro tipo, usamos el flujo regular de enteros
+            this.code.comment('Asignacion de tipo int');
+            this.code.addi(r.T1, r.SP, offset);   // Calculamos la posición en la pila
+            this.code.sw(r.A0, r.T1);             // Almacenamos el valor entero en memoria
+        }
+    
+        // Actualizamos el tipo del objeto de la variable
         variableObject.type = valueObject.type;
-
-        this.code.push(r.T0);
+    
+        // Empujamos el valor al stack nuevamente (float o int)
+        if (isFloat) {
+            this.code.pushFloat(f.FA0);  // Pusheamos el registro flotante
+        } else {
+            this.code.push(r.A0);   // Pusheamos el registro de enteros
+        }
+    
+        // Pusheamos el objeto con la nueva información de tipo
         this.code.pushObject(valueObject);
-
+    
         this.code.comment(`Fin Asignacion Variable: ${node.id}`);
     }
+    
+    
 
 
     /**
@@ -548,6 +659,89 @@ export class CompilerVisitor extends BaseVisitor {
     visitContinue(node) {
         this.code.j(this.continueLabel);
     }
+
+
+/**
+ * @type {BaseVisitor['visitSwitch']}
+ */
+visitSwitch(node) {
+    // Etiqueta para el fin del switch
+    const endSwitchLabel = this.code.getLabel();
+    const prevBreakLabel = this.breakLabel;
+    this.breakLabel = endSwitchLabel;
+
+    this.code.comment('Inicio de Switch');
+
+    // Evaluar la condición del switch y almacenarla en r.T0
+    this.code.comment('Evaluar la condición del switch');
+    node.cond.accept(this);
+    this.code.popObject(r.T0); // Almacenar la condición en r.T0
+
+    this.code.comment('Inicio de las opciones del switch');
+
+    // Generar código para cada caso
+    for (let caso of node.cases) {
+        // Para cada valor en las condiciones del caso
+        for (let condicion of caso.conds) {
+            const caseLabel = `case${condicion.valor}`;
+            
+            // Comprobar si la condición es igual
+            this.code.comment(`Comprobar si r.T0 == ${condicion.valor}`);
+            this.code.li(r.T1, condicion.valor); // Cargar el valor del caso
+            this.code.beq(r.T0, r.T1, caseLabel); // Si es igual, saltar al caso
+        }
+    }
+
+    // Si ningún caso coincide, saltar al default si existe
+    const hasDefault = !!node.defaults;
+    if (hasDefault) {
+        this.code.comment('Ningún caso coincide, saltar al default');
+        this.code.j('default');
+    }
+
+    // Generar las etiquetas y el código para cada caso
+    for (let caso of node.cases) {
+        const caseLabel = `case${caso.conds[0].valor}`; // Etiqueta del primer valor del caso
+        this.code.label(caseLabel); // Generar la etiqueta para el caso
+        caso.accept(this); // Procesar las declaraciones del cuerpo del caso
+        this.code.j(endSwitchLabel); // Saltar al final del switch
+    }
+
+    // Generar el código para el default, si existe
+    this.code.comment('Se crea el default');
+    if(hasDefault){
+        this.code.addLabel("default");
+        for (let defaul of node.defaults) {
+            defaul.accept(this);
+          }
+    }
+
+    // Etiqueta para el final del switch
+    this.code.label(endSwitchLabel);
+    this.code.comment('Fin de Switch');
+
+    // Restaurar la etiqueta de break previa
+    this.breakLabel = prevBreakLabel;
+}
+
+
+
+
+
+    /**
+     * @type {BaseVisitor['visitCase']}
+     */
+    visitCasos(node) {
+        this.code.comment('Inicio de Case');
+        node.stmtCases.forEach(stmt => {
+            stmt.accept(this); // Procesar cada declaración del cuerpo del case
+        });
+
+        // Manejar el break en el case, saltando a la etiqueta de fin de switch
+        this.code.j(this.breakLabel); // Saltar al final del switch si hay un break
+    }
+
+
 
 
     /**
