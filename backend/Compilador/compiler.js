@@ -661,68 +661,72 @@ export class CompilerVisitor extends BaseVisitor {
     }
 
 
-/**
- * @type {BaseVisitor['visitSwitch']}
- */
-visitSwitch(node) {
-    // Etiqueta para el fin del switch
-    const endSwitchLabel = this.code.getLabel();
-    const prevBreakLabel = this.breakLabel;
-    this.breakLabel = endSwitchLabel;
+    /**
+     * @type {BaseVisitor['visitSwitch']}
+     */
+    visitSwitch(node) {
+        // Etiqueta para el fin del switch
+        const endSwitchLabel = this.code.getLabel();
+        const prevBreakLabel = this.breakLabel;
+        this.breakLabel = endSwitchLabel;
 
-    this.code.comment('Inicio de Switch');
+        this.code.comment('Inicio de Switch');
 
-    // Evaluar la condición del switch y almacenarla en r.T0
-    this.code.comment('Evaluar la condición del switch');
-    node.cond.accept(this);
-    this.code.popObject(r.T0); // Almacenar la condición en r.T0
+        // Evaluar la condición del switch y almacenarla en r.T0
+        this.code.comment('Evaluar la condición del switch');
+        node.cond.accept(this);
+        this.code.popObject(r.T0); // Almacenar la condición en r.T0
 
-    this.code.comment('Inicio de las opciones del switch');
+        this.code.comment('Inicio de las opciones del switch');
 
-    // Generar código para cada caso
-    for (let caso of node.cases) {
-        // Para cada valor en las condiciones del caso
-        for (let condicion of caso.conds) {
-            const caseLabel = `case${condicion.valor}`;
-            
-            // Comprobar si la condición es igual
-            this.code.comment(`Comprobar si r.T0 == ${condicion.valor}`);
-            this.code.li(r.T1, condicion.valor); // Cargar el valor del caso
-            this.code.beq(r.T0, r.T1, caseLabel); // Si es igual, saltar al caso
+        // Generar código para cada caso
+        for (let caso of node.cases) {
+            for (let condicion of caso.conds) {
+                const singleCaseLabel = `case${condicion.valor}`; // Crear la etiqueta con formato caseX
+                this.code.comment(`Comprobar si r.T0 == ${condicion.valor}`);
+                this.code.li(r.T1, condicion.valor); // Cargar el valor del caso
+                this.code.beq(r.T0, r.T1, singleCaseLabel); // Si es igual, saltar a la etiqueta correspondiente
+            }
         }
+
+        this.code.comment('Fin de las opciones del switch');
+
+        // Si ningún caso coincide, saltar al default si existe
+        const hasDefault = !!node.defaults;
+        if (hasDefault) {
+            this.code.comment('Ningún caso coincide, saltar al default');
+            this.code.j('default');
+        }
+
+        // Generar las etiquetas y el código para cada caso
+        this.code.comment('Generar las etiquetas y el código para cada caso');
+        for (let caso of node.cases) {
+            for (let condicion of caso.conds) {
+                const singleCaseLabel = `case${condicion.valor}`; // Crear la etiqueta con formato caseX
+                this.code.label(singleCaseLabel); // Generar la etiqueta
+            }
+            caso.accept(this); // Procesar las declaraciones del cuerpo del caso
+            this.code.j(endSwitchLabel); // Saltar al final del switch después del caso
+        }
+
+        this.code.comment('Fin de generar las etiquetas de las opciones del switch');
+
+        // Generar el código para el default, si existe
+        if (hasDefault) {
+            this.code.addLabel('default');
+            for (let defaul of node.defaults) {
+                defaul.accept(this);
+            }
+        }
+
+        // Etiqueta para el final del switch
+        this.code.label(endSwitchLabel);
+        this.code.comment('Fin de Switch');
+
+        // Restaurar la etiqueta de break previa
+        this.breakLabel = prevBreakLabel;
     }
 
-    // Si ningún caso coincide, saltar al default si existe
-    const hasDefault = !!node.defaults;
-    if (hasDefault) {
-        this.code.comment('Ningún caso coincide, saltar al default');
-        this.code.j('default');
-    }
-
-    // Generar las etiquetas y el código para cada caso
-    for (let caso of node.cases) {
-        const caseLabel = `case${caso.conds[0].valor}`; // Etiqueta del primer valor del caso
-        this.code.label(caseLabel); // Generar la etiqueta para el caso
-        caso.accept(this); // Procesar las declaraciones del cuerpo del caso
-        this.code.j(endSwitchLabel); // Saltar al final del switch
-    }
-
-    // Generar el código para el default, si existe
-    this.code.comment('Se crea el default');
-    if(hasDefault){
-        this.code.addLabel("default");
-        for (let defaul of node.defaults) {
-            defaul.accept(this);
-          }
-    }
-
-    // Etiqueta para el final del switch
-    this.code.label(endSwitchLabel);
-    this.code.comment('Fin de Switch');
-
-    // Restaurar la etiqueta de break previa
-    this.breakLabel = prevBreakLabel;
-}
 
 
 

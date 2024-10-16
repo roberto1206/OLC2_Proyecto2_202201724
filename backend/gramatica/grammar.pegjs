@@ -291,8 +291,16 @@ Numero =
   / id:"typeof" _ expr1:Expresion {return crearNodo('referenciaVariable', { id, expr1 })}
   / id:Identificador expr1:("[" _ exp:Expresion _ "]" {return exp})* {return crearNodo('referenciaVariable', { id, expr1:expr1 })}
 
-_ = ([ \t\n\r] / ComentarioML)*
+_ = ([ \t\n\r] / Comentarios)*
 
 
-Comentarios = "//" (![\n] .)*{return crearNodo('comentario', {texto:text(), tipo:'string'})}
-ComentarioML = "/*" (!("*/") .)* "*/"
+Comentarios = "//" (![\n] .)*
+            / "/*" (!("*/") .)* "*/"
+
+
+
+//_ = ([ \t\n\r] / ComentarioML)*
+
+
+//Comentarios = "//" (![\n] .)*{return crearNodo('comentario', {texto:text(), tipo:'string'})}
+//ComentarioML = "/*" (!("*/") .)* "*/"
