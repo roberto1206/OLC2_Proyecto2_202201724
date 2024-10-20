@@ -25,6 +25,7 @@ export class Generador {
 
     constructor() {
         this.instrucciones = []
+        this.data = []
         this.objectStack = []
         this.depth = 0
         this._usedBuiltins = new Set()
@@ -81,13 +82,20 @@ export class Generador {
         this.instrucciones.push(new Instruction('lb', rd, `${inmediato}(${rs1})`))
     }
 
+    dataInicial(datosArray){
+        this.comment('Inicio de la sección de datos')
+        const word = '.word';
+        const finalWord = word + ' ' + datosArray.join(', ');
+        this.data.push(finalWord);
+    }
+
     /**
      * Carga datos en memoria
      * sirve para arreglos. cadenas y otras cosas en memoria
      */
     la(rd, label) {
         this.instrucciones.push(new Instruction('la', rd, label));
-    } 
+    }
 
     // --- Saltos condicionales
     /**
@@ -175,10 +183,17 @@ export class Generador {
         this.li(r.A7, 11);   // System call for printing a character
         this.ecall();        // Hacer la llamada al sistema para imprimir '\n'
     }
+
+    printEspacioBlanco(){
+        this.li(r.A0, 32);   // ASCII de ' '
+        this.li(r.A7, 11);   // System call for printing a character
+        this.ecall();        // Hacer la llamada al sistema para imprimir ' '
+    }
     
     printInt(rd = r.A0) {
 
         console.log('printInt')
+        this.comment("Inicio de printInt");
 
         if (rd !== r.A0) {
             this.push(r.A0)
@@ -188,12 +203,11 @@ export class Generador {
         this.li(r.A7, 1)
         this.ecall()
 
-        // Imprimir salto de línea ('\n')
-        this.printNewLine();
-
         if (rd !== r.A0) {
             this.pop(r.A0)
         }
+
+        this.comment("Fin de printInt");
 
     }
 
@@ -206,9 +220,6 @@ export class Generador {
 
         this.li(r.A7, 4)
         this.ecall()
-
-        // Imprimir salto de línea ('\n')
-        this.printNewLine();
 
         if (rd !== r.A0) {
             this.pop(r.A0)
@@ -224,9 +235,6 @@ export class Generador {
     
         this.li(r.A7, 11)  // System call for printing a character
         this.ecall()
-
-        // Imprimir salto de línea ('\n')
-        this.printNewLine();
     
         if (rd !== r.A0) {
             this.pop(r.A0)
@@ -245,7 +253,12 @@ export class Generador {
     printBoolean(rd = r.A0) {
         console.log('printBoolean');
         this.callBuiltin('printBoolean');
-    }   
+    }
+    
+    printNull() {
+        console.log('printNull');
+        this.callBuiltin('printNull');
+    }
     
     endProgram() {
         this.li(r.A7, 10)
@@ -290,8 +303,8 @@ export class Generador {
             case 'char':
                 this.comment(`Pushing char ${object.valor}`);
                 this.li(r.T0, object.valor.charCodeAt(0));  // Cargar el valor ASCII del carácter
-                this.push();                               // Empujar a la pila
-                length = 1;                                // Longitud de 1 byte para un carácter
+                this.push(r.T0);                               // Empujar a la pila
+                length = 4;                                // Longitud de 1 byte para un carácter
                 break;
 
             case 'boolean':
@@ -307,6 +320,13 @@ export class Generador {
                 length = 4;
                 break;
 
+            case 'null':
+                this.comment('Pushing null');
+                this.li(r.T0, -1);
+                this.push(r.T0);
+                length = 4;
+                break;
+                
             default:
                 break;
         }
@@ -346,6 +366,9 @@ export class Generador {
                 break;
             case 'float':
                 this.popFloat(rd);
+                break;
+            case 'null':
+                this.pop(rd);
                 break;
             default:
                 break;
@@ -410,9 +433,12 @@ export class Generador {
             builtins[builtinName](this)
             this.ret()
         })
+
         return `.data
-        false_str: .string "false\\n" 
-        true_str:  .string "true\\n"
+        false_str: .string "false" 
+        true_str:  .string "true"
+        null_str:  .string "null"
+        ${this.data.map(d => `${d}`).join('\n')}
         heap:
 .text
 
@@ -422,7 +448,6 @@ la ${r.HP}, heap
 main:
 ${this.instrucciones.map(instruccion => `${instruccion}`).join('\n')}
 `}
-
 
     // --- Instruciones flotantes
 
@@ -486,5 +511,10 @@ ${this.instrucciones.map(instruccion => `${instruccion}`).join('\n')}
     //mover flotantes
     fmvx(rd, rs1){
         this.instrucciones.push(new Instruction('fmv.x.w', rd, rs1))
+    }
+
+    //comprobar con 0
+    beqz(rs1, label){
+        this.instrucciones.push(new Instruction('beqz', rs1, label))
     }
 }

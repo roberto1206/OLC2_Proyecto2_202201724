@@ -121,7 +121,7 @@ export class InterpreterVisitor extends BaseVisitor {
                   // Verifica si los valores son numéricos y si el divisor no es cero.
                   if (!isNaN(numIzqDiv) && !isNaN(numDerDiv)) {
                     if (numDerDiv === 0) {
-                      throw new Error("ERROR: División por cero no permitida.",  "en la linea: ", node.location.start.line + "en la columna: " + node.location.start.column);
+                      //throw new Error("ERROR: División por cero no permitida.",  "en la linea: ", node.location.start.line + "en la columna: " + node.location.start.column);
                     }
                     return numIzqDiv / numDerDiv;
                   }
@@ -132,7 +132,7 @@ export class InterpreterVisitor extends BaseVisitor {
                   // Verifica si ambos operandos son enteros.
                   if (Number.isInteger(izq) && Number.isInteger(der)) {
                     if (der === 0) {
-                      throw new Error("ERROR: División por cero no permitida en la operación de módulo.",  "en la linea: ", node.location.start.line + "en la columna: " + node.location.start.column);
+                      //throw new Error("ERROR: División por cero no permitida en la operación de módulo.",  "en la linea: ", node.location.start.line + "en la columna: " + node.location.start.column);
                     }
                     return izq % der;
                   }

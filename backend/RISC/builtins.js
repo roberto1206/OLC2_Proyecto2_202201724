@@ -411,6 +411,28 @@ export const printBoolean = (code, rd = r.A0) => {
     code.comment('Fin de printBoolean');
 };
 
+export const printNull = (code) => {
+    code.comment('Inicio de printNull');
+    
+    // Cargar la dirección de la cadena "null"
+    const nullStringAddr = 'null_str'; // Dirección de la cadena "null"
+    code.la(r.A0, nullStringAddr); // Cargar la dirección de "null_str" en r.A0
+    
+    // Imprimir "null"
+    code.li(r.A7, 4); // Llamada al sistema para imprimir una cadena
+    code.ecall(); // Imprimir "null"
+    
+    code.comment('Fin de printNull');
+}
+
+export const dividirN = (code) => {
+    // t1: left operand
+    // t0 -> right operand
+    code.div(r.T1, r.T0, r.T1);
+    code.push(r.T0);
+    code.pushObject({ type: 'int', length: 4 });
+}
+
 
 export const builtins = {
     concatString,
@@ -429,4 +451,6 @@ export const builtins = {
     equalF,
     notEqualF,
     printBoolean,
+    printNull,
+    dividirN,
 }

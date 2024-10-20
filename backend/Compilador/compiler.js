@@ -2,6 +2,9 @@ import { registers as r, floatRegisters as f } from "../RISC/constantes.js";
 import { Generador } from "../RISC/generador.js";
 import { BaseVisitor } from "../herramientas/visitor.js";
 
+// Inicializa un contador fuera de la función
+let switchCounter = 0;
+
 export class CompilerVisitor extends BaseVisitor {
 
     constructor() {
@@ -35,6 +38,7 @@ export class CompilerVisitor extends BaseVisitor {
         this.code.pushConstant({ type: node.tipo, valor: node.valor });
         this.code.comment(`Fin Primitivo: ${node.valor}`);
     }
+
 
     /**
      * @type {BaseVisitor['visitOperacionBinaria']}
@@ -153,7 +157,6 @@ export class CompilerVisitor extends BaseVisitor {
                     this.code.add(r.T0, r.T1, r.T0);
                     this.code.push(r.T0);
                     break;
-
                 }
                 if (izq.type === 'string' && der.type === 'string') {
                     this.code.add(r.A0, r.ZERO, r.T1);
@@ -171,7 +174,17 @@ export class CompilerVisitor extends BaseVisitor {
                 this.code.push(r.T0);
                 break;
             case '/':
-                this.code.div(r.T0, r.T1, r.T0);
+                /*this.code.beqz(r.T0, 'handle_div_by_zero'); // Verifica si divisor (r.T0) es 0
+                this.code.callBuiltin('dividirN');
+                this.code.pushObject({ type: 'int', length: 4 });
+                this.code.j('end_div');                     // Salta al final después de la división
+                this.code.label('handle_div_by_zero');      // Manejador de la división por 0
+                this.code.li(r.T0, -1);                     // Setea T0 a -1
+                this.code.push(r.T0);                       // Empuja -1 al stack
+                this.code.pushObject({ type: 'null', length: 4 });
+                this.code.label('end_div');                 // Final de la división
+                return;*/
+                this.code.div(r.T1, r.T0, r.T1);
                 this.code.push(r.T0);
                 break;
             case '%':
@@ -222,8 +235,8 @@ export class CompilerVisitor extends BaseVisitor {
         }
         this.code.pushObject({ type: 'int', length: 4 });
         this.code.comment(`Fin Operacion: ${node.op}`);
-        
     }    
+
 
     /**
      * @type {BaseVisitor['visitOperacionUnaria']}
@@ -357,7 +370,6 @@ export class CompilerVisitor extends BaseVisitor {
     
         this.code.comment(`Fin Incrementador Variable: ${node.id}`);
     }
-    
 
     /**
      * @type {BaseVisitor['visitAgrupacion']}
@@ -369,6 +381,8 @@ export class CompilerVisitor extends BaseVisitor {
 
     visitPrint(node) {
         this.code.comment('Print');
+        
+        let first = true
 
         for (const valor of node.exp) {
             valor.accept(this);
@@ -382,10 +396,12 @@ export class CompilerVisitor extends BaseVisitor {
                 'char': () => this.code.printChar(),
                 'boolean': () => this.code.printBoolean(),
                 'float': () => this.code.printFloat(),
+                'null': () => this.code.printNull(),
             }
-    
             tipoPrint[object.type]();
+            this.code.printEspacioBlanco();
         }
+        this.code.printNewLine();
         this.code.comment('Fin Print');
     }
 
@@ -665,6 +681,9 @@ export class CompilerVisitor extends BaseVisitor {
      * @type {BaseVisitor['visitSwitch']}
      */
     visitSwitch(node) {
+        // Incrementar el contador para cada llamada a visitSwitch
+        switchCounter++;
+        
         // Etiqueta para el fin del switch
         const endSwitchLabel = this.code.getLabel();
         const prevBreakLabel = this.breakLabel;
@@ -682,7 +701,8 @@ export class CompilerVisitor extends BaseVisitor {
         // Generar código para cada caso
         for (let caso of node.cases) {
             for (let condicion of caso.conds) {
-                const singleCaseLabel = `case${condicion.valor}`; // Crear la etiqueta con formato caseX
+                // Crear la etiqueta con formato caseX_y, donde X es el valor y Y es el contador
+                const singleCaseLabel = `case${condicion.valor}_${switchCounter}`; 
                 this.code.comment(`Comprobar si r.T0 == ${condicion.valor}`);
                 this.code.li(r.T1, condicion.valor); // Cargar el valor del caso
                 this.code.beq(r.T0, r.T1, singleCaseLabel); // Si es igual, saltar a la etiqueta correspondiente
@@ -695,15 +715,17 @@ export class CompilerVisitor extends BaseVisitor {
         const hasDefault = !!node.defaults;
         if (hasDefault) {
             this.code.comment('Ningún caso coincide, saltar al default');
-            this.code.j('default');
+            const defaultLabel = `default_${switchCounter}`; // Crear etiqueta de default única
+            this.code.j(defaultLabel);
         }
 
         // Generar las etiquetas y el código para cada caso
         this.code.comment('Generar las etiquetas y el código para cada caso');
         for (let caso of node.cases) {
             for (let condicion of caso.conds) {
-                const singleCaseLabel = `case${condicion.valor}`; // Crear la etiqueta con formato caseX
-                this.code.label(singleCaseLabel); // Generar la etiqueta
+                // Crear la etiqueta con formato caseX_y, donde X es el valor y Y es el contador
+                const singleCaseLabel = `case${condicion.valor}_${switchCounter}`; 
+                this.code.addLabel(singleCaseLabel); // Generar la etiqueta
             }
             caso.accept(this); // Procesar las declaraciones del cuerpo del caso
             this.code.j(endSwitchLabel); // Saltar al final del switch después del caso
@@ -713,7 +735,8 @@ export class CompilerVisitor extends BaseVisitor {
 
         // Generar el código para el default, si existe
         if (hasDefault) {
-            this.code.addLabel('default');
+            const defaultLabel = `default_${switchCounter}`; // Crear etiqueta de default única
+            this.code.addLabel(defaultLabel);
             for (let defaul of node.defaults) {
                 defaul.accept(this);
             }
@@ -726,9 +749,6 @@ export class CompilerVisitor extends BaseVisitor {
         // Restaurar la etiqueta de break previa
         this.breakLabel = prevBreakLabel;
     }
-
-
-
 
 
 
@@ -746,27 +766,34 @@ export class CompilerVisitor extends BaseVisitor {
     }
 
 
-
-
     /**
-     * @param {Comentarios} node
-     * @returns {any}
+     * @type {BaseVisitor['visitTernario']}
      */
-    visitComentarios(node) {
-        // Verifica si el texto del nodo comienza con "//"
-        if (node.texto.startsWith('//')) {
-            // Almacenar el comentario omitiendo los dos primeros caracteres "//"
-            const comentario = node.texto.substring(2).trim();
-    
-            // Aquí puedes usar la variable comentario de la manera que necesites
-            console.log('Comentario encontrado (sin //):', comentario);
-            this.code.comment(comentario);
-    
-            // Puedes realizar otras acciones con el comentario almacenado
-        }
+    visitTernario(node) {
+        this.code.comment('Ternario');
 
-        //throw new Error('Comnetario no valido');
+        node.cond.accept(this);
+        this.code.popObject(r.T0);
+        const labelFalse = this.code.getLabel();
+        const labelEnd = this.code.getLabel();
+
+        this.code.beq(r.T0, r.ZERO, labelFalse);
+        node.stmtTrue.accept(this) 
+        this.code.j(labelEnd);
+        this.code.addLabel(labelFalse);
+        node.stmtFalse.accept(this);
+        this.code.addLabel(labelEnd);
+
+        this.code.comment('Fin Ternario');
     }
     
+    /**
+     * @type {BaseVisitor['visitArray']}
+     */
+    visitArray(node) {
+        this.code.comment('Array');
+        this.code.comment('Inicio de Array');
+        this.code.comment('Fin de Array'); 
+    }
 
 }
