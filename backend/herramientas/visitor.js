@@ -97,6 +97,9 @@
  * @typedef {import('./nodos').FuncDcl} FuncDcl
 
 
+ * @typedef {import('./nodos').Param} Param
+
+
  * @typedef {import('./nodos').ClassDcl} ClassDcl
 
 
@@ -406,6 +409,15 @@ export class BaseVisitor {
      */
     visitFuncDcl(node) {
         throw new Error('Metodo visitFuncDcl no implementado');
+    }
+    
+
+    /**
+     * @param {Param} node
+     * @returns {any}
+     */
+    visitParam(node) {
+        throw new Error('Metodo visitParam no implementado');
     }
     
 

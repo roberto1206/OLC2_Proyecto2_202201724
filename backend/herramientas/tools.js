@@ -631,6 +631,22 @@ const configuracionNodos = [
             }
         ]
     },
+    {
+        name: 'Param',
+        extends: 'Expresion',
+        props: [
+            {
+                name: 'tipo',
+                type: 'string',
+                description: 'Identificador del parametro'
+            },
+            {
+                name: 'id',
+                type: 'string',
+                description: 'Tipo del parametro'
+            }
+        ]
+    },
     // ClassDcl
     // rearNodo('dclClase', { id, dcls }) }
     {

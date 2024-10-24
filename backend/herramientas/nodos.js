@@ -1188,6 +1188,39 @@ export class FuncDcl extends Expresion {
     }
 }
     
+export class Param extends Expresion {
+
+    /**
+    * @param {Object} options
+    * @param {string} options.tipo Identificador del parametro
+ * @param {string} options.id Tipo del parametro
+    */
+    constructor({ tipo, id }) {
+        super();
+        
+        /**
+         * Identificador del parametro
+         * @type {string}
+        */
+        this.tipo = tipo;
+
+
+        /**
+         * Tipo del parametro
+         * @type {string}
+        */
+        this.id = id;
+
+    }
+
+    /**
+     * @param {BaseVisitor} visitor
+     */
+    accept(visitor) {
+        return visitor.visitParam(this);
+    }
+}
+    
 export class ClassDcl extends Expresion {
 
     /**
@@ -1361,4 +1394,4 @@ export class Comentarios extends Expresion {
     }
 }
     
-export default { Expresion, OperacionBinaria, OperacionUnaria, Agrupacion, Primitivo, Numero, DeclaracionVariable, ReferenciaVariable, Print, ExpresionStmt, Asignacion, Bloque, If, While, Incrementador, For, Break, Continue, Return, Ternario, Switch, Casos, Array, Array1, Array2, FuncArray, ForEach, AsignacionVec1, Matriz, Matriz1, Llamada, FuncDcl, ClassDcl, Instancia, Get, Set, Comentarios }
+export default { Expresion, OperacionBinaria, OperacionUnaria, Agrupacion, Primitivo, Numero, DeclaracionVariable, ReferenciaVariable, Print, ExpresionStmt, Asignacion, Bloque, If, While, Incrementador, For, Break, Continue, Return, Ternario, Switch, Casos, Array, Array1, Array2, FuncArray, ForEach, AsignacionVec1, Matriz, Matriz1, Llamada, FuncDcl, Param, ClassDcl, Instancia, Get, Set, Comentarios }

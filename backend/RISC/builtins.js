@@ -425,6 +425,12 @@ export const printNull = (code) => {
     code.comment('Fin de printNull');
 }
 
+export const errorMemory = (code) => {
+    // Manejo de errores de memoria (puedes implementar esto según tus necesidades)
+    code.comment('Error: No hay suficiente memoria');
+    code.halt();  // Detener la ejecución o manejar el error según corresponda
+}
+
 export const dividirN = (code) => {
     // t1: left operand
     // t0 -> right operand
@@ -432,6 +438,21 @@ export const dividirN = (code) => {
     code.push(r.T0);
     code.pushObject({ type: 'int', length: 4 });
 }
+
+export const printArray = (code) => {
+    // A0 -> dirección en heap del array
+    code.comment('Inicio de printArray');
+    
+    // Cargar la dirección de la cadena "array"
+    code.mv(r.A0, r.T1); // Cargar la dirección del array en r.A0
+    
+    // Imprimir "array"
+    code.li(r.A7, 1); // Llamada al sistema para imprimir una cadena
+    code.ecall(); // Imprimir "array"
+    
+    code.comment('Fin de printArray');
+}
+
 
 
 export const builtins = {
@@ -453,4 +474,6 @@ export const builtins = {
     printBoolean,
     printNull,
     dividirN,
+    errorMemory,
+    printArray,
 }

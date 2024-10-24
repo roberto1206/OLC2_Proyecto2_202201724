@@ -27,6 +27,7 @@ export class Generador {
         this.instrucciones = []
         this.data = []
         this.objectStack = []
+        this.instrucionesDeFunciones = []
         this.depth = 0
         this._usedBuiltins = new Set()
         this._labelCounter = 0;
@@ -82,11 +83,20 @@ export class Generador {
         this.instrucciones.push(new Instruction('lb', rd, `${inmediato}(${rs1})`))
     }
 
-    dataInicial(datosArray){
-        this.comment('Inicio de la sección de datos')
+    mv(rd, rs1) {
+        this.instrucciones.push(new Instruction('mv', rd, rs1))
+    }
+
+    dataInicial(id,datos) {
+        this.comment('Inicio de la sección de datos');
+        
+        // 'datos' ya es un array, así que simplemente lo usas con join para crear la línea deseada
         const word = '.word';
-        const finalWord = word + ' ' + datosArray.join(', ');
-        this.data.push(finalWord);
+        const finalWord = word + ' ' + datos.join(', '); // Une los valores con coma y espacio
+        const final = id + ': ' + finalWord;
+        this.data.push(final);
+        
+        this.comment('Fin de la sección de datos');
     }
 
     /**
@@ -259,6 +269,21 @@ export class Generador {
         console.log('printNull');
         this.callBuiltin('printNull');
     }
+
+    printArray() {
+        // A0 -> dirección en heap del array
+        this.comment('Inicio de printArray');
+        
+        // Cargar la dirección de la cadena "array"
+        this.mv(r.A0, r.T1); // Cargar la dirección del array en r.A0
+        
+        // Imprimir "array"
+        this.li(r.A7, 1); // Llamada al sistema para imprimir una cadena
+        this.ecall(); // Imprimir "array"
+        
+        this.comment('Fin de printArray');
+        
+    }
     
     endProgram() {
         this.li(r.A7, 10)
@@ -326,6 +351,12 @@ export class Generador {
                 this.push(r.T0);
                 length = 4;
                 break;
+            case 'array':
+                this.comment('Pushing array');
+                this.li(r.T0, object.valor);
+                this.push(r.T0);
+                length = 4;
+                break;
                 
             default:
                 break;
@@ -340,6 +371,7 @@ export class Generador {
             depth: this.depth,
         });
     }
+
 
     popFloat(rd = r.FT0) {
         this.comment(`Popping float to ${rd}`)
@@ -370,6 +402,9 @@ export class Generador {
             case 'null':
                 this.pop(rd);
                 break;
+            case 'array':
+                this.pop(rd);
+                break;
             default:
                 break;
         }
@@ -379,6 +414,33 @@ export class Generador {
 
     getTopObject() {
         return this.objectStack[this.objectStack.length - 1];
+    }
+
+    allocateSpace(size, id){
+        // Cargar el tamaño que queremos reservar
+        this.li(r.T0, size);              // Cargar el tamaño en T0
+
+        // Comprobar si hay suficiente espacio en el heap
+        this.bge(r.HP, r.T0, 'error_memory'); // Si HP < size, ir a error
+
+        //almacenar el id
+        this.tagObject(id);
+
+        // Reservar espacio
+        this.addi(r.HP, r.HP, size);      // Decrementar el puntero de heap por el tamaño requerido
+        //this.sw(r.HP, r.T1, 0);           // Guardar la dirección reservada en el registro T1 o en otro lugar si es necesario
+
+        this.callBuiltin('errorMemory');
+        return; // Salir del método
+    }
+
+    subi(rd, rs1, inmediato) {
+        this.instrucciones.push(new Instruction('subi', rd, rs1, inmediato))
+    }
+
+    halt() {
+        this.li(r.A7, 10);  // System call para terminar el programa
+        this.ecall();       // Hacer la llamada al sistema
     }
 
     /*
@@ -405,16 +467,15 @@ export class Generador {
         return byteOffset;
     }
 
-
     tagObject(id) {
         this.objectStack[this.objectStack.length - 1].id = id;
     }
+
 
     getObject(id) {
         let byteOffset = 0;
         for (let i = this.objectStack.length - 1; i >= 0; i--) {
             if (this.objectStack[i].id === id) {
-                this.comment('variable ${id} found');
                 return [byteOffset, this.objectStack[i]];
             }
             byteOffset += this.objectStack[i].length;
@@ -427,6 +488,9 @@ export class Generador {
         this.comment('Fin del programa')
         this.endProgram()
         this.comment('Builtins')
+
+        this.comment('Funciones foraneas')
+        this.instrucionesDeFunciones.forEach(instruccion => this.instrucciones.push(instruccion))
 
         Array.from(this._usedBuiltins).forEach(builtinName => {
             this.addLabel(builtinName)
@@ -516,5 +580,14 @@ ${this.instrucciones.map(instruccion => `${instruccion}`).join('\n')}
     //comprobar con 0
     beqz(rs1, label){
         this.instrucciones.push(new Instruction('beqz', rs1, label))
+    }
+
+    getFrameLocal(index) {
+        const frameRelativeLocal = this.objectStack.filter(obj => obj.type === 'local');
+        return frameRelativeLocal[index];
+    }
+
+    jalr(rd, rs1, imm) {
+        this.instrucciones.push(new Instruction('jalr', rd, rs1, imm))
     }
 }

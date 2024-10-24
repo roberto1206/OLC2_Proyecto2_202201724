@@ -1,3 +1,5 @@
+import { FrameVisitor } from "./frame.js";
+import { ReferenciaVariable } from "../herramientas/nodos.js";
 import { registers as r, floatRegisters as f } from "../RISC/constantes.js";
 import { Generador } from "../RISC/generador.js";
 import { BaseVisitor } from "../herramientas/visitor.js";
@@ -14,6 +16,11 @@ export class CompilerVisitor extends BaseVisitor {
         
         this.continueLabel = null;
         this.breakLabel = null;
+
+        this.functionMetada = {}
+        this.insideFunction = false;
+        this.frameDclIndex = 0;
+        this.returnLabel = null;
     }
 
     /**
@@ -98,10 +105,12 @@ export class CompilerVisitor extends BaseVisitor {
         node.izq.accept(this); // izq
         node.der.accept(this); // der
 
+        this.code.comment('Se mueven para hacer la operacion');
         const isDerFloat = this.code.getTopObject().type === 'float';
         const der = this.code.popObject(isDerFloat ? f.FT0 : r.T0); // der
         const isIzqFloat = this.code.getTopObject().type === 'float';
         const izq = this.code.popObject(isIzqFloat ? f.FT1 : r.T1); // izq
+        this.code.comment('Fin de mover para hacer la operacion');
 
         if (isIzqFloat || isDerFloat) {
             if (!isIzqFloat) this.code.fcvtsw(f.FT1, r.T1);
@@ -153,6 +162,7 @@ export class CompilerVisitor extends BaseVisitor {
 
         switch (node.op) {
             case '+':
+                this.code.comment('Operacion Suma');
                 if(izq.type==='int' && der.type==='int') {
                     this.code.add(r.T0, r.T1, r.T0);
                     this.code.push(r.T0);
@@ -381,8 +391,6 @@ export class CompilerVisitor extends BaseVisitor {
 
     visitPrint(node) {
         this.code.comment('Print');
-        
-        let first = true
 
         for (const valor of node.exp) {
             valor.accept(this);
@@ -397,6 +405,7 @@ export class CompilerVisitor extends BaseVisitor {
                 'boolean': () => this.code.printBoolean(),
                 'float': () => this.code.printFloat(),
                 'null': () => this.code.printNull(),
+                'array': () => this.code.printArray(),
             }
             tipoPrint[object.type]();
             this.code.printEspacioBlanco();
@@ -410,8 +419,21 @@ export class CompilerVisitor extends BaseVisitor {
      */
     visitDeclaracionVariable(node) {
         this.code.comment(`Declaracion Variable: ${node.id}`);
-
         node.exp.accept(this);
+        if (this.insideFunction) {
+            const localObject = this.code.getFrameLocal(this.frameDclIndex);
+            const valueObj = this.code.popObject(r.T0);
+
+            this.code.addi(r.T1, r.FP, -localObject.offset * 4);
+            this.code.sw(r.T0, r.T1);
+
+            // ! inferir el tipo
+            localObject.type = valueObj.type;
+            this.frameDclIndex++;
+
+            return
+        }
+
         this.code.tagObject(node.id);
 
         this.code.comment(`Fin declaracion Variable: ${node.id}`);
@@ -434,6 +456,12 @@ export class CompilerVisitor extends BaseVisitor {
     
         // Obtenemos el desplazamiento (offset) de la variable en la memoria
         const [offset, variableObject] = this.code.getObject(node.id);
+
+        if (this.insideFunction) {
+            this.code.addi(r.T1, r.FP, -variableObject.offset * 4); // ! REVISAR
+            this.code.sw(r.T0, r.T1); // ! revisar
+            return
+        }
     
         // Almacenamos el valor dependiendo de si es float o int
         if (isFloat) {
@@ -463,26 +491,49 @@ export class CompilerVisitor extends BaseVisitor {
     
         this.code.comment(`Fin Asignacion Variable: ${node.id}`);
     }
-    
-    
-
 
     /**
      * @type {BaseVisitor['visitReferenciaVariable']}
      */
     visitReferenciaVariable(node) {
         this.code.comment(`Referencia a variable ${node.id}: ${JSON.stringify(this.code.objectStack)}`);
-
-
+    
         const [offset, variableObject] = this.code.getObject(node.id);
-        this.code.addi(r.T0, r.SP, offset);
-        this.code.lw(r.T1, r.T0);
-        this.code.push(r.T1);
-        this.code.pushObject({ ...variableObject, id: undefined });
 
-        // this.code.comment(`Fin Referencia Variable: ${node.id}`);
+        if (this.insideFunction) {
+            this.code.addi(r.T1, r.FP, -variableObject.offset * 4);
+            this.code.lw(r.T0, r.T1);
+            this.code.push(r.T0);
+            this.code.pushObject({ ...variableObject, id: undefined });
+            return
+        }
+
+        this.code.addi(r.T0, r.SP, offset); // Cargar dirección de la variable en T0
+        this.code.lw(r.T1, r.T0); // Cargar el valor de la variable en T1
+        this.code.push(r.T1); // Empujar el valor al stack
+        this.code.pushObject({ ...variableObject, id: undefined }); // Empujar el objeto de la variable sin ID
+    
+        if (node.expr1.length > 0) {
+            for (const datos of node.expr1) {
+                const valor = datos.valor;
+    
+                // Verificar si valor es undefined
+                if (valor === undefined) {
+                    break; // Salir del bucle si el valor es indefinido
+                }
+    
+                const desplazamiento = valor * 4; // Calcular desplazamiento
+                console.log("Desplazamiento multiplicado: ", desplazamiento);
+                console.log("Valor de la expresión: ", valor);
+    
+                // Cargar el valor desde la dirección calculada
+                this.code.lw(r.T1, r.T0, desplazamiento);
+                this.code.push(r.T1); // Empujar el valor cargado al stack
+            }
+        }
         this.code.comment(`Fin referencia de variable ${node.id}: ${JSON.stringify(this.code.objectStack)}`);
     }
+    
 
 
     /**
@@ -790,10 +841,217 @@ export class CompilerVisitor extends BaseVisitor {
     /**
      * @type {BaseVisitor['visitArray']}
      */
-    visitArray(node) {
+   visitArray(node) {
         this.code.comment('Array');
         this.code.comment('Inicio de Array');
-        this.code.comment('Fin de Array'); 
+        
+        const valoresAceptados = [];
+        for (const valor of node.exp) {
+            valoresAceptados.push(valor.valor);
+        }
+
+        // Pasa el array completo a dataInicial
+        this.code.dataInicial(node.id,valoresAceptados);
+        
+        this.code.pushObject({ type: 'array', valor: node.id, length: valoresAceptados.length * 4 });  // Empujar el id y longitud
+
+
+        this.code.la(r.T0, node.id);
+
+        this.code.tagObject(node.id);
+
+
+        this.code.comment('Fin de Array');
+    }
+    /*visitArray(node) {
+        this.code.comment('Array');
+        this.code.comment('Inicio de Array');
+    
+        const valoresAceptados = [];
+        for (const valor of node.exp) {
+            valoresAceptados.push(valor.valor);
+        }
+    
+        // Pasa el array completo a dataInicial
+        this.code.dataInicial(valoresAceptados);
+
+        
+        // Reservar espacio para el array
+        const size = valoresAceptados.length * 4;  // Tamaño total del array    
+        this.code.pushObject({ type: 'array', valor: node.id, length: valoresAceptados.length * 4 });  // Empujar el id y longitud
+        this.code.allocateSpace(size, node.id);              // Método hipotético para reservar espacio
+    
+        this.code.comment('Fin de declarar el espacio del array');
+        this.code.comment('Fin de Array');
+    }*/
+    
+
+    /*
+    visitDeclaracionVariable(node) {
+        this.code.comment(`Declaracion Variable: ${node.id}`);
+
+        node.exp.accept(this);
+        this.code.tagObject(node.id);
+
+        this.code.comment(`Fin declaracion Variable: ${node.id}`);
+    }
+    */
+
+    /**
+     * @type {BaseVisitor['visitFuncDcl']}
+     */
+    visitFuncDcl(node) {
+        const baseSize = 2; // | ra | fp |
+
+        const paramSize = node.params.length; // | ra | fp | p1 | p2 | ... | pn |
+
+        const frameVisitor = new FrameVisitor(baseSize + paramSize);
+        node.bloque.accept(frameVisitor);
+        const localFrame = frameVisitor.frame;
+        const localSize = localFrame.length; // | ra | fp | p1 | p2 | ... | pn | l1 | l2 | ... | ln |
+
+        const returnSize = 1; // | ra | fp | p1 | p2 | ... | pn | l1 | l2 | ... | ln | rv |
+
+        const totalSize = baseSize + paramSize + localSize + returnSize;
+        this.functionMetada[node.id] = {
+            frameSize: totalSize,
+            returnType: node.tipo,
+        }
+
+        const instruccionesDeMain = this.code.instrucciones;
+        const instruccionesDeDeclaracionDeFuncion = []
+        this.code.instrucciones = instruccionesDeDeclaracionDeFuncion;
+
+        node.params.forEach((param, index) => {
+            console.log("param", param);
+            const [tipo, , id] = param;  // Desestructuramos el array
+            console.log("tipo", tipo);
+            console.log("id", id);
+            this.code.pushObject({
+                id: id,             // Obtenemos el tercer valor como el "id"
+                type: tipo,         // El primer valor como el "tipo"
+                length: 4,
+                offset: baseSize + index
+            });
+        });
+
+        localFrame.forEach(variableLocal => {
+            this.code.pushObject({
+                ...variableLocal,
+                length: 4,
+                type: 'local',
+            })
+        });
+
+        this.insideFunction = node.id;
+        this.frameDclIndex = 0;
+        this.returnLabel = this.code.getLabel();
+
+        this.code.comment(`Declaracion de funcion ${node.id}`);
+        this.code.addLabel(node.id);
+
+        node.bloque.accept(this);
+
+        this.code.addLabel(this.returnLabel);
+
+        this.code.add(r.T0, r.ZERO, r.FP);
+        this.code.lw(r.RA, r.T0);
+        this.code.jalr(r.ZERO, r.RA, 0);
+        this.code.comment(`Fin de declaracion de funcion ${node.id}`);
+
+        // Limpiar metadatos
+        for (let i = 0; i < paramSize + localSize; i++) {
+            this.code.objectStack.pop(); // ! aqui no retrocedemos el SP, hay que hacerlo más adelanto
+        }
+
+        this.code.instrucciones = instruccionesDeMain
+
+        instruccionesDeDeclaracionDeFuncion.forEach(instruccion => {
+            this.code.instrucionesDeFunciones.push(instruccion);
+        });
+
+        this.insideFunction = null;
+
     }
 
+    /**
+     * @type {BaseVisitor['visitLlamada']}
+     */
+    visitLlamada(node) {
+        if (!(node.callee instanceof ReferenciaVariable)) return
+
+        const nombreFuncion = node.callee.id;
+
+        this.code.comment(`Llamada a funcion ${nombreFuncion}`);
+
+        const etiquetaRetornoLlamada = this.code.getLabel();
+
+        // 1. Guardar los argumentos
+        node.args.forEach((arg, index) => {
+            arg.accept(this)
+            this.code.popObject(r.T0)
+            this.code.addi(r.T1, r.SP, -4 * (3 + index)) // ! REVISAR
+            this.code.sw(r.T0, r.T1)
+        });
+
+        // Calcular la dirección del nuevo FP en T1
+        this.code.addi(r.T1, r.SP, -4)
+
+        // Guardar direccion de retorno
+        this.code.la(r.T0, etiquetaRetornoLlamada)
+        this.code.push(r.T0)
+
+        // Guardar el FP
+        this.code.push(r.FP)
+        this.code.addi(r.FP, r.T1, 0)
+
+        // colocar el SP al final del frame
+        // this.code.addi(r.SP, r.SP, -(this.functionMetada[nombreFuncion].frameSize - 4))
+        this.code.addi(r.SP, r.SP, -(node.args.length * 4)) // ! REVISAR
+
+
+        // Saltar a la función
+        this.code.j(nombreFuncion)
+        this.code.addLabel(etiquetaRetornoLlamada)
+
+        // Recuperar el valor de retorno
+        const frameSize = this.functionMetada[nombreFuncion].frameSize
+        const returnSize = frameSize - 1;
+        this.code.addi(r.T0, r.FP, -returnSize * 4)
+        this.code.lw(r.A0, r.T0)
+
+        // Regresar el FP al contexto de ejecución anterior
+        this.code.addi(r.T0, r.FP, -4)
+        this.code.lw(r.FP, r.T0)
+
+        // Regresar mi SP al contexto de ejecución anterior
+        this.code.addi(r.SP, r.SP, (frameSize - 1) * 4)
+
+
+        this.code.push(r.A0)
+        this.code.pushObject({ type: this.functionMetada[nombreFuncion].returnType, length: 4 })
+
+        this.code.comment(`Fin de llamada a funcion ${nombreFuncion}`);
+    }
+
+
+    /**
+     * @type {BaseVisitor['visitReturn']}
+     */
+    visitReturn(node) {
+        this.code.comment('Inicio Return');
+
+        if (node.exp) {
+            node.exp.accept(this);
+            this.code.popObject(r.A0);
+
+            const frameSize = this.functionMetada[this.insideFunction].frameSize
+            const returnOffest = frameSize - 1;
+            this.code.addi(r.T0, r.FP, -returnOffest * 4)
+            this.code.sw(r.A0, r.T0)
+        }
+
+        this.code.j(this.returnLabel);
+        this.code.comment('Final Return');
+    }
 }
