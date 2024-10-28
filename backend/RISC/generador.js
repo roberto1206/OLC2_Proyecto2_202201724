@@ -181,11 +181,13 @@ export class Generador {
     }
 
     callBuiltin(builtinName) {
+        this.comment(`Calling builtin`)
         if (!builtins[builtinName]) {
             throw new Error(`Builtin ${builtinName} not found`)
         }
         this._usedBuiltins.add(builtinName)
         this.jal(builtinName)
+        this.comment(`End of builtin`)
     }
 
     printNewLine() {
@@ -502,6 +504,11 @@ export class Generador {
         false_str: .string "false" 
         true_str:  .string "true"
         null_str:  .string "null"
+        int_str:   .string "int"
+        float_str: .string "float"
+        string_str:.string "string"
+        char_str:  .string "char"
+        bool_str : .string "bool"
         ${this.data.map(d => `${d}`).join('\n')}
         heap:
 .text
@@ -589,5 +596,34 @@ ${this.instrucciones.map(instruccion => `${instruccion}`).join('\n')}
 
     jalr(rd, rs1, imm) {
         this.instrucciones.push(new Instruction('jalr', rd, rs1, imm))
+    }
+
+    bgt(rs1, rs2, label) {
+        this.instrucciones.push(new Instruction('bgt', rs1, rs2, label))
+    }
+
+    printStringLiteral(string) {
+        const stringArray = stringTo1ByteArray(string);
+        stringArray.pop(); // No queremos el 0 al final
+
+        this.comment(`Imprimiendo literal ${string}`);
+
+        stringArray.forEach((charCode) => {
+            this.li(r.A0, charCode);
+            this.printChar();
+        });
+        this.printNewLine();
+    }
+
+    neg(rd, rs1) {
+        this.instrucciones.push(new Instruction('neg', rd, rs1))
+    }
+
+    bgez(rs1, label) {
+        this.instrucciones.push(new Instruction('bgez', rs1, label))
+    }
+
+    bnez(rs1, label) {
+        this.instrucciones.push(new Instruction('bnez', rs1, label))
     }
 }

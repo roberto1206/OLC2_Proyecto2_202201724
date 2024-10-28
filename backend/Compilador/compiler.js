@@ -4,6 +4,7 @@ import { registers as r, floatRegisters as f } from "../RISC/constantes.js";
 import { Generador } from "../RISC/generador.js";
 import { BaseVisitor } from "../herramientas/visitor.js";
 
+
 // Inicializa un contador fuera de la función
 let switchCounter = 0;
 
@@ -395,8 +396,10 @@ export class CompilerVisitor extends BaseVisitor {
         for (const valor of node.exp) {
             valor.accept(this);
             
+            this.code.comment('Esta parte es del print');
             const isFloat = this.code.getTopObject().type === 'float';
             const object = this.code.popObject(isFloat ? f.FA0 : r.A0);
+            this.code.comment('Fin donde esta el pop en el print');
 
             const tipoPrint = {
                 'int': () => this.code.printInt(),
@@ -497,7 +500,49 @@ export class CompilerVisitor extends BaseVisitor {
      */
     visitReferenciaVariable(node) {
         this.code.comment(`Referencia a variable ${node.id}: ${JSON.stringify(this.code.objectStack)}`);
+        if (node.id == "typeof") {
+            console.log("entra a typeof");
+            const datoP = this.code.getTopObject().type;
+            console.log("DatoP: ", datoP);
     
+            if (datoP === 'int') {
+                this.code.popObject(r.T0);
+                this.code.li(r.T0, 0);
+                this.code.sw(r.T0, r.SP);
+                this.code.callBuiltin('typeOf');
+                this.code.pushObject({ type: 'int', length: 4 });
+                return;
+            } else if (datoP === 'float') {
+                this.code.popObject(f.FT0);
+                this.code.li(r.T0, 1);
+                this.code.sw(r.T0, r.SP);
+                this.code.callBuiltin('typeOf');
+                this.code.pushObject({ type: 'int', length: 4 });
+                return;
+            } else if (datoP === 'string') {
+                this.code.popObject(r.T0);
+                this.code.li(r.T0, 2);
+                this.code.sw(r.T0, r.SP);
+                this.code.callBuiltin('typeOf');
+                this.code.pushObject({ type: 'int', length: 4 });
+                return;
+            } else if (datoP === 'boolean') {
+                this.code.popObject(r.T0);
+                this.code.li(r.T0, 4); // Valor específico para boolean
+                this.code.sw(r.T0, r.SP);
+                this.code.callBuiltin('typeOf');
+                this.code.pushObject({ type: 'boolean', length: 4 });
+                return;
+            } else if (datoP === 'char') {
+                this.code.popObject(r.T0);
+                this.code.li(r.T0, 3); // Valor específico para char
+                this.code.sw(r.T0, r.SP);
+                this.code.callBuiltin('typeOf');
+                this.code.pushObject({ type: 'int', length: 4 });
+                return;
+            }
+        }
+
         const [offset, variableObject] = this.code.getObject(node.id);
 
         if (this.insideFunction) {
@@ -984,15 +1029,56 @@ export class CompilerVisitor extends BaseVisitor {
 
         this.code.comment(`Llamada a funcion ${nombreFuncion}`);
 
+
+        // ---- LLamadas a funcion embebidas
+        const embebidas = {
+            parseInt: () => {
+                node.args[0].accept(this);
+                this.code.popObject(r.A0);
+                this.code.callBuiltin('parseInt');
+                this.code.pushObject({ type: 'int', length: 4 });
+            },
+            parsefloat: () => {
+                node.args[0].accept(this);
+                this.code.popObject(r.A0);
+                this.code.callBuiltin('parseFloat');
+                this.code.pushObject({ type: 'float', length: 4 });
+            },
+            toString: () => {
+                node.args[0].accept(this);
+                this.code.popObject(r.A0);
+                this.code.callBuiltin('parseString');
+                this.code.pushObject({ type: 'string', length: 4 });   
+            },
+            toUpperCase: () => {
+                node.args[0].accept(this);
+                this.code.popObject(r.A0);
+                this.code.callBuiltin('toUpperCase');
+                this.code.pushObject({ type: 'string', length: 4 });
+            },
+            toLowerCase: () => {
+                node.args[0].accept(this);
+                this.code.popObject(r.A0);
+                this.code.callBuiltin('toLowerCase');
+                this.code.pushObject({ type: 'string', length: 4 });
+            },
+        }
+
+        if (embebidas[nombreFuncion]) {
+            embebidas[nombreFuncion]();
+            return
+        }
+
+        // ---- LLamadas a funcion foraneas
+
         const etiquetaRetornoLlamada = this.code.getLabel();
 
         // 1. Guardar los argumentos
-        node.args.forEach((arg, index) => {
+        this.code.addi(r.SP, r.SP, -4 * 2)
+        node.args.forEach((arg) => {
             arg.accept(this)
-            this.code.popObject(r.T0)
-            this.code.addi(r.T1, r.SP, -4 * (3 + index)) // ! REVISAR
-            this.code.sw(r.T0, r.T1)
         });
+        this.code.addi(r.SP, r.SP, 4 * (node.args.length + 2))
 
         // Calcular la dirección del nuevo FP en T1
         this.code.addi(r.T1, r.SP, -4)
@@ -1005,9 +1091,8 @@ export class CompilerVisitor extends BaseVisitor {
         this.code.push(r.FP)
         this.code.addi(r.FP, r.T1, 0)
 
-        // colocar el SP al final del frame
-        // this.code.addi(r.SP, r.SP, -(this.functionMetada[nombreFuncion].frameSize - 4))
-        this.code.addi(r.SP, r.SP, -(node.args.length * 4)) // ! REVISAR
+        const frameSize = this.functionMetada[nombreFuncion].frameSize
+        this.code.addi(r.SP, r.SP, -(frameSize - 2) * 4)
 
 
         // Saltar a la función
@@ -1015,7 +1100,6 @@ export class CompilerVisitor extends BaseVisitor {
         this.code.addLabel(etiquetaRetornoLlamada)
 
         // Recuperar el valor de retorno
-        const frameSize = this.functionMetada[nombreFuncion].frameSize
         const returnSize = frameSize - 1;
         this.code.addi(r.T0, r.FP, -returnSize * 4)
         this.code.lw(r.A0, r.T0)
@@ -1025,7 +1109,7 @@ export class CompilerVisitor extends BaseVisitor {
         this.code.lw(r.FP, r.T0)
 
         // Regresar mi SP al contexto de ejecución anterior
-        this.code.addi(r.SP, r.SP, (frameSize - 1) * 4)
+        this.code.addi(r.SP, r.SP, frameSize * 4)
 
 
         this.code.push(r.A0)
