@@ -499,7 +499,7 @@ export class CompilerVisitor extends BaseVisitor {
      * @type {BaseVisitor['visitReferenciaVariable']}
      */
     visitReferenciaVariable(node) {
-        this.code.comment(`Referencia a variable ${node.id}: ${JSON.stringify(this.code.objectStack)}`);
+        this.code.comment(`Referencia a variable ${node.id}:`);
         if (node.id == "typeof") {
             console.log("entra a typeof");
             const datoP = this.code.getTopObject().type;
@@ -544,6 +544,9 @@ export class CompilerVisitor extends BaseVisitor {
         }
 
         const [offset, variableObject] = this.code.getObject(node.id);
+        console.log("VariableObject: ", variableObject);
+        console.log("offset: ", offset);    
+
 
         if (this.insideFunction) {
             this.code.addi(r.T1, r.FP, -variableObject.offset * 4);
@@ -553,14 +556,14 @@ export class CompilerVisitor extends BaseVisitor {
             return
         }
 
-        this.code.addi(r.T0, r.SP, offset); // Cargar dirección de la variable en T0
-        this.code.lw(r.T1, r.T0); // Cargar el valor de la variable en T1
-        this.code.push(r.T1); // Empujar el valor al stack
-        this.code.pushObject({ ...variableObject, id: undefined }); // Empujar el objeto de la variable sin ID
-    
         if (node.expr1.length > 0) {
+            //this.code.addi(r.T0, r.SP, offset); // Cargar dirección de la variable en T0
+            this.code.lw(r.T1, r.T0); // Cargar el valor de la variable en T1
+            this.code.push(r.T1); // Empujar el valor al stack
+            this.code.pushObject({ ...variableObject, id: undefined }); // Empujar el objeto de la variable sin ID
+
             for (const datos of node.expr1) {
-                const valor = datos.valor;
+                const valor = datos.valor
     
                 // Verificar si valor es undefined
                 if (valor === undefined) {
@@ -575,8 +578,14 @@ export class CompilerVisitor extends BaseVisitor {
                 this.code.lw(r.T1, r.T0, desplazamiento);
                 this.code.push(r.T1); // Empujar el valor cargado al stack
             }
+            return;
         }
-        this.code.comment(`Fin referencia de variable ${node.id}: ${JSON.stringify(this.code.objectStack)}`);
+
+        this.code.addi(r.T0, r.SP, offset); // Cargar dirección de la variable en T0
+        this.code.lw(r.T1, r.T0); // Cargar el valor de la variable en T1
+        this.code.push(r.T1); // Empujar el valor al stack
+        this.code.pushObject({ ...variableObject, id: undefined }); // Empujar el objeto de la variable sin ID
+        this.code.comment(`Fin referencia de variable ${node.id}`);
     }
     
 
@@ -889,59 +898,24 @@ export class CompilerVisitor extends BaseVisitor {
    visitArray(node) {
         this.code.comment('Array');
         this.code.comment('Inicio de Array');
-        
         const valoresAceptados = [];
         for (const valor of node.exp) {
             valoresAceptados.push(valor.valor);
         }
-
         // Pasa el array completo a dataInicial
-        this.code.dataInicial(node.id,valoresAceptados);
-        
+        this.code.dataInicial(node.id, valoresAceptados);
         this.code.pushObject({ type: 'array', valor: node.id, length: valoresAceptados.length * 4 });  // Empujar el id y longitud
-
-
         this.code.la(r.T0, node.id);
-
         this.code.tagObject(node.id);
-
-
         this.code.comment('Fin de Array');
     }
-    /*visitArray(node) {
-        this.code.comment('Array');
-        this.code.comment('Inicio de Array');
-    
-        const valoresAceptados = [];
-        for (const valor of node.exp) {
-            valoresAceptados.push(valor.valor);
-        }
-    
-        // Pasa el array completo a dataInicial
-        this.code.dataInicial(valoresAceptados);
 
-        
-        // Reservar espacio para el array
-        const size = valoresAceptados.length * 4;  // Tamaño total del array    
-        this.code.pushObject({ type: 'array', valor: node.id, length: valoresAceptados.length * 4 });  // Empujar el id y longitud
-        this.code.allocateSpace(size, node.id);              // Método hipotético para reservar espacio
-    
-        this.code.comment('Fin de declarar el espacio del array');
-        this.code.comment('Fin de Array');
-    }*/
-    
+    visitAsignacionVec1(node) {
+        const nuevoValor = node.asgn.accept(this);
+        const nombreVariable = node.id;
 
-    /*
-    visitDeclaracionVariable(node) {
-        this.code.comment(`Declaracion Variable: ${node.id}`);
-
-        node.exp.accept(this);
-        this.code.tagObject(node.id);
-
-        this.code.comment(`Fin declaracion Variable: ${node.id}`);
+        console.log("nuevoValor: ", nuevoValor);
     }
-    */
-
     /**
      * @type {BaseVisitor['visitFuncDcl']}
      */

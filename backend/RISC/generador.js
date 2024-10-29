@@ -275,16 +275,12 @@ export class Generador {
     printArray() {
         // A0 -> dirección en heap del array
         this.comment('Inicio de printArray');
-        
         // Cargar la dirección de la cadena "array"
         this.mv(r.A0, r.T1); // Cargar la dirección del array en r.A0
-        
         // Imprimir "array"
         this.li(r.A7, 1); // Llamada al sistema para imprimir una cadena
         this.ecall(); // Imprimir "array"
-        
         this.comment('Fin de printArray');
-        
     }
     
     endProgram() {
